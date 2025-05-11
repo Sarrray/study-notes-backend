@@ -1,0 +1,148 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  study-notes-backend
+
+  Sample SAM Template for study-notes-backend
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+
+    # You can add LoggingConfig parameters such as the Logformat, Log Group, and SystemLogLevel or ApplicationLogLevel. Learn more here https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html#sam-function-loggingconfig.
+    LoggingConfig:
+      LogFormat: JSON
+
+Parameters:
+  EnvType:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+    Description: "環境タイプ（dev or prod）"
+  AllowOrigin:
+    Type: String
+    Description: "CORSを許可するオリジン"
+  SsmParameterName:
+    Type: String
+    Default: /my/api/key
+    Description: "SSMパラメータ名"
+
+Conditions:
+  IsDev: !Equals [!Ref EnvType, dev]
+  IsProd: !Equals [!Ref EnvType, prod]
+
+Resources:
+  MyApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors:
+        AllowOrigin: !Sub "'${AllowOrigin}'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowMethods: "'POST,OPTIONS'"
+        AllowCredentials: true
+  SuggestRecipesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: suggest-recipes
+      CodeUri: recipe/
+      Handler: src/suggestions.suggestRecipes
+      Runtime: nodejs20.x
+      MemorySize: 256
+      Timeout: 10
+      Environment:
+        Variables:
+          ALLOWED_ORIGIN: !Ref AllowOrigin
+          SSM_PARAMETER_NAME: !Ref SsmParameterName
+      Events:
+        # 開発用: Method any（OPTIONSもLambdaに流す）
+        DevApi:
+          Condition: IsDev
+          Type: Api
+          Properties:
+            RestApiId: !Ref MyApi
+            Path: /suggestions
+            Method: any
+        # 本番用: Method post + CORS
+        ProdApi:
+          Condition: IsProd
+          Type: Api
+          Properties:
+            RestApiId: !Ref MyApi
+            Path: /suggestions
+            Method: post
+    Metadata: # Manage esbuild properties
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+          - src/suggestions.ts
+
+  GetRecipeDetailFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: get-recipe-detail
+      CodeUri: recipe/
+      Handler: src/detail.getRecipeDetail
+      Runtime: nodejs20.x
+      MemorySize: 256
+      Timeout: 10
+      Environment:
+        Variables:
+          ALLOWED_ORIGIN: !Ref AllowOrigin
+          SSM_PARAMETER_NAME: !Ref SsmParameterName
+      Events:
+        # 開発用: Method any（OPTIONSもLambdaに流す）
+        DevApi:
+          Condition: IsDev
+          Type: Api
+          Properties:
+            RestApiId: !Ref MyApi
+            Path: /detail
+            Method: any
+        # 本番用: Method post + CORS
+        ProdApi:
+          Condition: IsProd
+          Type: Api
+          Properties:
+            RestApiId: !Ref MyApi
+            Path: /detail
+            Method: post
+    Metadata: # Manage esbuild properties
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+          - src/detail.ts
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  SuggestRecipesApi:
+    Description: API Gateway endpoint URL for Prod stage for Suggest Recipes function
+    Condition: IsProd
+    Value: !Sub "https://${MyApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/suggestions"
+  SuggestRecipesFunction:
+    Description: Suggest Recipes Lambda Function ARN
+    Value: !GetAtt SuggestRecipesFunction.Arn
+  SuggestRecipesFunctionIamRole:
+    Description: Implicit IAM Role created for Suggest Recipes function
+    Value: !GetAtt SuggestRecipesFunctionRole.Arn
+  GetRecipeDetailApi:
+    Description: API Gateway endpoint URL for Prod stage for Get Recipe Detail function
+    Condition: IsProd
+    Value: !Sub "https://${MyApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/detail"
+  GetRecipeDetailFunction:
+    Description: Get Recipe Detail Lambda Function ARN
+    Value: !GetAtt GetRecipeDetailFunction.Arn
+  GetRecipeDetailFunctionIamRole:
+    Description: Implicit IAM Role created for Get Recipe Detail function
+    Value: !GetAtt GetRecipeDetailFunctionRole.Arn

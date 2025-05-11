@@ -1,0 +1,15 @@
+GET http://127.0.0.1:3000/hello
+
+POST http://127.0.0.1:3000/suggestions
+Content-Type: application/json
+
+{
+    "ingredients": ["卵、キャベツ、ウィンナー"]
+}
+
+POST http://127.0.0.1:3000/detail
+Content-Type: application/json
+
+{
+    "recipeName": "キャベツとウインナーの炒め物"
+}
